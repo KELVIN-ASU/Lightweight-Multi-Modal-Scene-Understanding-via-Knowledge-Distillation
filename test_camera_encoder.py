@@ -1,22 +1,32 @@
 import torch
-
-# Import TwinLiteEncoder from your src/models folder
 from src.models.camera_encoder import TwinLiteEncoder
 
-# 1. Select device: GPU if available, otherwise CPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-# 2. Initialize model and move to device
 model = TwinLiteEncoder().to(device)
-
-# 3. Create a dummy input tensor (batch size=1, 3 channels, 256x256 image)
-dummy_input = torch.randn(1, 3, 256, 256).to(device)
-
-# 4. Forward pass through the encoder
 model.eval()
-with torch.no_grad():
-    output = model(dummy_input)
 
-# 5. Print output shape
-print(f"Output shape: {output.shape}")  # Expect: [1, 128, 32, 32]
+# -------------------------------------------------
+# 1. Test with a 256x256 RGB image
+# -------------------------------------------------
+dummy_input_1 = torch.randn(1, 3, 256, 256).to(device)
+with torch.no_grad():
+    output_1 = model(dummy_input_1)
+print(f"Input (1, 3, 256, 256) -> Output {output_1.shape}")
+
+# -------------------------------------------------
+# 2. Test with a 512x512 RGB image
+# -------------------------------------------------
+dummy_input_2 = torch.randn(1, 3, 512, 512).to(device)
+with torch.no_grad():
+    output_2 = model(dummy_input_2)
+print(f"Input (1, 3, 512, 512) -> Output {output_2.shape}")
+
+# -------------------------------------------------
+# 3. Test with a batch of 4 images (128x128)
+# -------------------------------------------------
+dummy_input_3 = torch.randn(4, 3, 128, 128).to(device)
+with torch.no_grad():
+    output_3 = model(dummy_input_3)
+print(f"Input (4, 3, 128, 128) -> Output {output_3.shape}")
