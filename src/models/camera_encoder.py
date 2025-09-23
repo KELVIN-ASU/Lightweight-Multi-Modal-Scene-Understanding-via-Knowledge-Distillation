@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -52,8 +53,10 @@ class InvertedResidual(nn.Module):
 # TwinLiteEncoder: Lightweight CNN for images
 # -----------------------------------------------
 class TwinLiteEncoder(nn.Module):
-    def __init__(self, in_channels=3, base_channels=32):
+    def __init__(self, in_channels=3, base_channels=32, return_multiscale=False):
         super().__init__()
+        
+        self.return_multiscale = return_multiscale
 
         # Initial stem conv: reduce spatial size and extract low-level features
         self.stem = nn.Sequential(
@@ -62,30 +65,58 @@ class TwinLiteEncoder(nn.Module):
             nn.ReLU6(inplace=True)
         )
 
-        # Stack of inverted residual blocks
-        self.blocks = nn.Sequential(
-            # Block 1: keep size the same
-            InvertedResidual(base_channels, base_channels, stride=1, expansion_ratio=1),
+        # Stage 1: Keep size the same, minimal expansion for efficiency
+        self.stage1 = InvertedResidual(base_channels, base_channels, stride=1, expansion_ratio=1)
+        
+        # Stage 2: Downsample and expand channels
+        self.stage2 = InvertedResidual(base_channels, base_channels * 2, stride=2, expansion_ratio=6)
+        
+        # Stage 3: Keep same size, add more capacity
+        self.stage3 = InvertedResidual(base_channels * 2, base_channels * 2, stride=1, expansion_ratio=6)
+        
+        # Stage 4: Final downsample and channel expansion
+        self.stage4 = InvertedResidual(base_channels * 2, base_channels * 4, stride=2, expansion_ratio=6)
+        
+        # Optional: Add one more stage for deeper features if needed
+        self.stage5 = InvertedResidual(base_channels * 4, base_channels * 4, stride=1, expansion_ratio=6)
 
-            # Block 2: downsample and expand channels
-            InvertedResidual(base_channels, base_channels * 2, stride=2, expansion_ratio=6),
-
-            # Block 3: keep same size, more capacity
-            InvertedResidual(base_channels * 2, base_channels * 2, stride=1, expansion_ratio=6),
-
-            # Block 4: downsample again, increase channels
-            InvertedResidual(base_channels * 2, base_channels * 4, stride=2, expansion_ratio=6),
-        )
-
-        # Final number of output channels (needed by decoder or fusion module)
+        # Store channel dimensions for each scale (useful for fusion module)
+        self.feature_channels = {
+            'stage2': base_channels * 2,  # 1/4 resolution
+            'stage3': base_channels * 2,  # 1/4 resolution  
+            'stage4': base_channels * 4,  # 1/8 resolution
+            'stage5': base_channels * 4   # 1/8 resolution
+        }
+        
+        # Final output channels (for single-scale output)
         self.out_channels = base_channels * 4
 
     def forward(self, x):
-        # Pass through stem conv
-        x = self.stem(x)
+        # Input: [B, 3, H, W]
+        x = self.stem(x)      # [B, 32, H/2, W/2]
+        
+        x1 = self.stage1(x)   # [B, 32, H/2, W/2]
+        x2 = self.stage2(x1)  # [B, 64, H/4, W/4]
+        x3 = self.stage3(x2)  # [B, 64, H/4, W/4]
+        x4 = self.stage4(x3)  # [B, 128, H/8, W/8]
+        x5 = self.stage5(x4)  # [B, 128, H/8, W/8]
 
-        # Pass through inverted residual blocks
-        x = self.blocks(x)
+        if self.return_multiscale:
+            # Return features at multiple scales for richer fusion
+            return {
+                'stage2': x2,  # Early features, higher resolution
+                'stage3': x3,  # Mid-level features
+                'stage4': x4,  # Deep features, lower resolution
+                'stage5': x5   # Final features
+            }
+        else:
+            # Return only final features (your original approach)
+            return x5
 
-        # Output is the feature map to be fused or decoded
-        return x
+    def get_feature_info(self):
+        """Helper method to get channel dimensions at each scale"""
+        return self.feature_channels
+    
+    def count_parameters(self):
+        """Count total parameters in the encoder"""
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)

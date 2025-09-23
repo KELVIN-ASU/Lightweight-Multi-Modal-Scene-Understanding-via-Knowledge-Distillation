@@ -90,40 +90,42 @@ class SpatialLiDAREncoder(nn.Module):
         # Convert normalized coords to integer grid indices
         grid_coords = (coords * torch.tensor([W - 1, H - 1], device=points.device)).long()
 
-        # ✅ Clamp indices to valid range
+        # Clamp indices to valid range
         grid_coords[..., 0] = grid_coords[..., 0].clamp(0, W - 1)
         grid_coords[..., 1] = grid_coords[..., 1].clamp(0, H - 1)
 
-        # Batch indices
-        batch_indices = torch.arange(B, device=points.device)[:, None].expand(B, N)
-
-        # Select valid points
-        valid_batch = batch_indices[valid_mask]
-        valid_features = point_features.permute(0, 2, 1)[valid_mask]  # [valid_points, C]
-        valid_coords = grid_coords[valid_mask]
-
-        if len(valid_batch) > 0:
-            # Linear indices for scatter
-            linear_indices = valid_batch * (H * W) + valid_coords[:, 1] * W + valid_coords[:, 0]
-
-            # Flatten feature map
-            feature_map_flat = feature_map.view(B, self.feature_dim, H * W)
-
-            # Expand indices to match feature dimensions
-            expanded_indices = linear_indices.unsqueeze(1).expand(-1, self.feature_dim)
-
-            # Scatter with max pooling (safe on CPU + GPU)
-            feature_map_flat.scatter_reduce_(
-                2,
-                expanded_indices,
-                valid_features.t(),  # [C, valid_points]
-                reduce="amax",
-                include_self=False
-            )
-
-            feature_map = feature_map_flat.view(B, self.feature_dim, H, W)
+        # Process each sample in the batch separately (simple and robust)
+        for b in range(B):
+            # Get valid points for this batch
+            batch_valid_mask = valid_mask[b]  # [N]
+            if not batch_valid_mask.any():
+                continue
+            
+            # Get features and coordinates for valid points
+            batch_features = point_features[b, :, batch_valid_mask]  # [C, num_valid_points]
+            batch_coords = grid_coords[b, batch_valid_mask]  # [num_valid_points, 2]
+            
+            # Get x, y indices
+            x_indices = batch_coords[:, 0]  # [num_valid_points]
+            y_indices = batch_coords[:, 1]  # [num_valid_points]
+            
+            # Simple approach: iterate over valid points and use max pooling
+            for i in range(len(x_indices)):
+                x_idx = x_indices[i].item()
+                y_idx = y_indices[i].item()
+                point_feat = batch_features[:, i]  # [C]
+                
+                # Max pooling: take element-wise max with existing features
+                feature_map[b, :, y_idx, x_idx] = torch.maximum(
+                    feature_map[b, :, y_idx, x_idx], 
+                    point_feat
+                )
 
         return feature_map
+
+    def count_parameters(self):
+        """Count total parameters in the encoder"""
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 
 # ================================================================
@@ -160,6 +162,10 @@ class PointPillarsLiDAREncoder(nn.Module):
         bev_features = self.pillar_encoder(voxel_features, voxel_coords, batch_size)
         return bev_features
 
+    def count_parameters(self):
+        """Count total parameters in the encoder"""
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
 
 # ================================================================
 # Unified LiDAR Encoder Factory
@@ -192,3 +198,7 @@ class LiDAREncoder(nn.Module):
             return (self.encoder.feature_dim, self.encoder.grid_size[0], self.encoder.grid_size[1])
         else:
             return (128, 32, 32)  # Example placeholder for PointPillars
+    
+    def count_parameters(self):
+        """Count total parameters in the encoder"""
+        return self.encoder.count_parameters()
