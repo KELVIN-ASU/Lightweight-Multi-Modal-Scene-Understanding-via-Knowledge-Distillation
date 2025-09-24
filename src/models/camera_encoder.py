@@ -22,7 +22,7 @@ class InvertedResidual(nn.Module):
             layers.extend([
                 nn.Conv2d(in_channels, hidden_dim, kernel_size=1, bias=False),
                 nn.BatchNorm2d(hidden_dim),
-                nn.ReLU6(inplace=True)
+                nn.ReLU6()  # Fixed: removed inplace=True
             ])
 
         # 2. Depthwise convolution (3x3)
@@ -30,7 +30,7 @@ class InvertedResidual(nn.Module):
             nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3, stride=stride, padding=1,
                       groups=hidden_dim, bias=False),  # Depthwise: one conv per channel
             nn.BatchNorm2d(hidden_dim),
-            nn.ReLU6(inplace=True)
+            nn.ReLU6()  # Fixed: removed inplace=True
         ])
 
         # 3. Pointwise projection back to out_channels
@@ -62,7 +62,7 @@ class TwinLiteEncoder(nn.Module):
         self.stem = nn.Sequential(
             nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(base_channels),
-            nn.ReLU6(inplace=True)
+            nn.ReLU6()  # Fixed: removed inplace=True
         )
 
         # Stage 1: Keep size the same, minimal expansion for efficiency

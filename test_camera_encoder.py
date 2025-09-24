@@ -10,7 +10,7 @@ def main():
     model = TwinLiteEncoder().to(device)
     model.eval()
 
-    # Print parameter count to monitor your 1M budget
+    # Print parameter count to monitor 
     print(f"Camera encoder parameters: {model.count_parameters():,}")
     print(f"Output channels: {model.out_channels}")
     print("-" * 50)
