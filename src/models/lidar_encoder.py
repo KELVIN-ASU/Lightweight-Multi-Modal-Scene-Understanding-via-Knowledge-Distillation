@@ -187,7 +187,7 @@ class PointPillarsLiDAREncoder(nn.Module):
 
 
 # ================================================================
-# Unified LiDAR Encoder Factory
+# Unified LiDAR Encoder
 # ================================================================
 class LiDAREncoder(nn.Module):
     def __init__(self, encoder_type: str = "spatial", use_vectorized: bool = True, **kwargs):
