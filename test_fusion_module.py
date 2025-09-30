@@ -1,3 +1,6 @@
+# test_fusion_module.py
+# Simple test script for fusion module and full model forward/backward pass
+
 import torch
 import torch.nn.functional as F
 
