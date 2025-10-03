@@ -1,6 +1,6 @@
 # src/data_loading/data_interface.py
 """
-Unified data interface that can switch between synthetic and nuScenes data
+Unified data interface that can switch between synthetic and real data
 """
 from torch.utils.data import DataLoader
 from typing import Tuple, Optional
@@ -41,7 +41,7 @@ def create_dataloaders(dataset_type: str = 'synthetic',
             raise ValueError("dataroot must be specified for nuScenes dataset")
             
         try:
-            from .nuscenes_dataset import create_dataloaders as create_nuscenes_loaders
+            from nuscenes_dataset import create_dataloaders as create_nuscenes_loaders
             return create_nuscenes_loaders(
                 dataroot=dataroot,
                 batch_size=batch_size,

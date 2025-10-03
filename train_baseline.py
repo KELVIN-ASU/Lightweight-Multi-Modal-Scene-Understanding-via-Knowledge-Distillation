@@ -76,12 +76,12 @@ def main():
     parser.add_argument('--num_val_samples', type=int, default=200,
                        help='Number of synthetic validation samples')
     
-    # nuScenes dataset arguments  
+    #dataset arguments  
     parser.add_argument('--dataroot', type=str, default=None,
                        help='Path to nuScenes dataset root (required for nuscenes)')
     parser.add_argument('--version', type=str, default='v1.0-mini',
                        choices=['v1.0-mini', 'v1.0-trainval'],
-                       help='nuScenes dataset version')
+                       help='dataset version')
     
     # Model arguments
     parser.add_argument('--fusion_type', type=str, default='concat',
@@ -95,7 +95,7 @@ def main():
                        help='LiDAR BEV grid size [H, W]')
     
     # Training arguments
-    parser.add_argument('--epochs', type=int, default=20,
+    parser.add_argument('--epochs', type=int, default=50,
                        help='Number of training epochs')
     parser.add_argument('--batch_size', type=int, default=4,
                        help='Batch size for training')
