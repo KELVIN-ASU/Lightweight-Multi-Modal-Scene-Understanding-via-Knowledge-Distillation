@@ -8,18 +8,15 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 # --------------------
-# Label remapping: PandaSet → {0=background,1=drivable,2=lane}
+# Label remapping: PandaSet → {0=background, 1=drivable (includes lanes)}
 # --------------------
-_DRIVABLE = {6, 7, 12}     # Ground, Road, Driveway
-_LANES    = {8, 9, 10}     # Lane line, Stop line, Other markings
+_DRIVABLE = {6, 7, 8, 9, 10, 12}  # Ground, Road, Lane markings, Stop lines, Other markings, Driveway
 
 def remap_semantic(raw_ids: np.ndarray) -> np.ndarray:
-    """Map PandaSet raw class IDs into {0,1,2}."""
+    """Map PandaSet raw class IDs into {0=background, 1=drivable}."""
     mapped = np.zeros_like(raw_ids, dtype=np.int64)
     for k in _DRIVABLE:
         mapped[raw_ids == k] = 1
-    for k in _LANES:
-        mapped[raw_ids == k] = 2
     return mapped
 
 
@@ -28,7 +25,7 @@ def rasterize_bev(
     grid_size: Tuple[int, int] = (64, 64),
     pc_range: Tuple[float, float, float, float] = (-50, 50, -50, 50)
 ) -> np.ndarray:
-    """Rasterize per-point labels into a BEV mask {0,1,2}."""
+    """Rasterize per-point labels into a BEV mask {0,1}."""
     H, W = grid_size
     x_min, x_max, y_min, y_max = pc_range
 
@@ -43,18 +40,14 @@ def rasterize_bev(
     row = np.clip(((y - y_min) / (y_max - y_min) * (H - 1)).astype(int), 0, H - 1)
 
     for r, c, lab in zip(row, col, labels):
-        if mask[r, c] == 0:  # keep first hit
+        if mask[r, c] == 0:
             mask[r, c] = lab
     return mask
 
 
 class PandaSetDataset(Dataset):
     """
-    Loads front_camera images, LiDAR point clouds, and BEV segmentation masks.
-    Expects:
-      root/001/camera/front_camera/00.jpg
-      root/001/lidar/00.pkl
-      root/001/annotations/semseg/00.pkl
+    2-class version: background (0) and drivable (1, includes lanes).
     """
     def __init__(
         self,
@@ -74,7 +67,7 @@ class PandaSetDataset(Dataset):
 
         self.samples = self._index_scenes(verbose=verbose)
         if verbose:
-            print(f"✅ Indexed {len(self.samples)} valid samples from {len(scene_ids)} scenes")
+            print(f"Indexed {len(self.samples)} valid samples from {len(scene_ids)} scenes")
 
     def _index_scenes(self, verbose: bool = True):
         samples = []
@@ -125,7 +118,6 @@ class PandaSetDataset(Dataset):
         i = lidar_df["i"].to_numpy(dtype=np.float32)
         pts = np.stack([x, y, z, i], axis=1)
 
-        # pad/truncate to max_points
         if pts.shape[0] > self.max_points:
             choice = np.random.choice(pts.shape[0], self.max_points, replace=False)
             pts = pts[choice]
@@ -134,17 +126,17 @@ class PandaSetDataset(Dataset):
             pts = np.vstack([pts, pad])
         pts_t = torch.from_numpy(pts).contiguous()
 
-        # --- Semseg to BEV mask ---
+        # --- Semseg to BEV mask (2-class) ---
         sem_df = pd.read_pickle(s["semseg"])
         raw_ids = sem_df["class"].to_numpy(dtype=np.int64)
-        ids3 = remap_semantic(raw_ids)
-        bev = rasterize_bev(x, y, ids3, grid_size=self.grid_size, pc_range=self.pc_range)
+        ids2 = remap_semantic(raw_ids)
+        bev = rasterize_bev(x, y, ids2, grid_size=self.grid_size, pc_range=self.pc_range)
         bev_t = torch.from_numpy(bev.astype(np.int64))
 
         return {
-            "image": img_t,          # [3,H,W]
-            "points": pts_t,         # [N,4]
-            "segmentation": bev_t,   # [H_bev,W_bev]
+            "image": img_t,
+            "points": pts_t,
+            "segmentation": bev_t,
             "sample_token": f"{s['scene']}_{s['frame']}",
         }
 

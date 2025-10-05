@@ -34,13 +34,8 @@ class DWSeparableConv(nn.Module):
         return self.net(x)
 
 
-# ----------------------------
-# Camera multi-scale squeeze (FPN-lite)
-# ----------------------------
 class CameraFPNLite(nn.Module):
-    """
-    Fuses multi-scale camera features {stage: tensor} into a single map.
-    """
+    """Fuses multi-scale camera features."""
     def __init__(self, in_channels_by_stage: Dict[str, int],
                  target_channels: int = 128,
                  stages_to_use: Optional[List[str]] = None,
@@ -51,7 +46,7 @@ class CameraFPNLite(nn.Module):
         for s in self.stages_to_use:
             self.laterals[s] = Conv1x1(in_channels_by_stage[s], target_channels)
         self.post = DWSeparableConv(target_channels, target_channels)
-        self.target_size = target_size  # (H, W) or None = infer at runtime
+        self.target_size = target_size
 
     def forward(self, feats: Dict[str, torch.Tensor]) -> torch.Tensor:
         if self.target_size is None:
@@ -73,7 +68,7 @@ class CameraFPNLite(nn.Module):
 # Fusion blocks
 # ----------------------------
 class ConcatenationFusion(nn.Module):
-    """Concat camera+LiDAR → depthwise + pointwise conv fusion."""
+    """Concat camera+LiDAR -> depthwise + pointwise conv fusion."""
     def __init__(self, camera_channels=128, lidar_channels=128, out_channels=256):
         super().__init__()
         self.camera_proj = Conv1x1(camera_channels, camera_channels)
@@ -109,12 +104,44 @@ class MinimalFusion(nn.Module):
         return self.cam_proj(cam_feat) + self.lidar_proj(lidar_feat)
 
 
+class WeightedFusion(nn.Module):
+    """Learnable weighted fusion with spatial attention."""
+    def __init__(self, cam_ch=128, lidar_ch=128, out_ch=128):
+        super().__init__()
+        self.cam_proj = Conv1x1(cam_ch, out_ch)
+        self.lidar_proj = Conv1x1(lidar_ch, out_ch)
+        
+        # Spatial attention to learn per-location weights
+        self.attention = nn.Sequential(
+            nn.Conv2d(out_ch * 2, out_ch, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(out_ch, 2, kernel_size=1),
+            nn.Softmax(dim=1)
+        )
+
+    def forward(self, cam_feat: torch.Tensor, lidar_feat: torch.Tensor) -> torch.Tensor:
+        if cam_feat.shape[-2:] != lidar_feat.shape[-2:]:
+            lidar_feat = F.interpolate(lidar_feat, size=cam_feat.shape[-2:], mode="bilinear", align_corners=False)
+        
+        cam_proj = self.cam_proj(cam_feat)
+        lidar_proj = self.lidar_proj(lidar_feat)
+        
+        # Compute spatial attention weights
+        concat = torch.cat([cam_proj, lidar_proj], dim=1)
+        weights = self.attention(concat)  # [B, 2, H, W]
+        
+        cam_weight = weights[:, 0:1, :, :]
+        lidar_weight = weights[:, 1:2, :, :]
+        
+        return cam_proj * cam_weight + lidar_proj * lidar_weight
+
+
 # ----------------------------
-# Decoder / Heads
+# Decoder heads
 # ----------------------------
 class LightweightSegmentationHead(nn.Module):
-    """Two-stage upsampling head: 64×64 → 128×128 → 256×256."""
-    def __init__(self, in_channels=256, num_classes=3):
+    """Two-stage upsampling head."""
+    def __init__(self, in_channels=256, num_classes=2):
         super().__init__()
         self.up1 = nn.Sequential(
             nn.ConvTranspose2d(in_channels, 64, kernel_size=4, stride=2, padding=1, bias=False),
@@ -133,8 +160,8 @@ class LightweightSegmentationHead(nn.Module):
 
 
 class SameResolutionSegmentationHead(nn.Module):
-    """Keeps feature resolution (e.g., 64×64 for BEV)."""
-    def __init__(self, in_channels=256, num_classes=3):
+    """Keeps feature resolution (64x64 for BEV)."""
+    def __init__(self, in_channels=256, num_classes=2):
         super().__init__()
         self.block = nn.Sequential(
             DWSeparableConv(in_channels, 64),
@@ -153,12 +180,12 @@ class CompleteSegmentationModel(nn.Module):
     def __init__(self,
                  camera_encoder: nn.Module,
                  lidar_encoder: nn.Module,
-                 num_classes: int = 3,
+                 num_classes: int = 2,
                  fusion_type: str = "concat",
                  fusion_out_channels: int = 256,
                  camera_fpn_stages: Optional[List[str]] = None,
                  camera_fpn_channels: int = 128,
-                 output_mode: str = "x4"
+                 output_mode: str = "same"
                  ):
         super().__init__()
         self.camera_encoder = camera_encoder
@@ -190,6 +217,9 @@ class CompleteSegmentationModel(nn.Module):
         elif fusion_type == "minimal":
             self.fusion = MinimalFusion(cam_ch=cam_feat_channels, lidar_ch=lidar_feat_channels, out_ch=cam_feat_channels)
             head_in = cam_feat_channels
+        elif fusion_type == "weighted":
+            self.fusion = WeightedFusion(cam_ch=cam_feat_channels, lidar_ch=lidar_feat_channels, out_ch=cam_feat_channels)
+            head_in = cam_feat_channels
         else:
             raise ValueError(f"Unknown fusion_type: {fusion_type}")
 
@@ -215,7 +245,14 @@ class CompleteSegmentationModel(nn.Module):
             pre_fusion = torch.cat([cam_proj, lidar_proj], dim=1)
             fused = self.fusion.fuse(pre_fusion)
         else:
-            pre_fusion = self.fusion.cam_proj(cam_feat) + self.fusion.lidar_proj(lidar_feat)
+            cam_proj = self.fusion.cam_proj(cam_feat)
+            lidar_proj = self.fusion.lidar_proj(lidar_feat)
+            if isinstance(self.fusion, WeightedFusion):
+                concat = torch.cat([cam_proj, lidar_proj], dim=1)
+                weights = self.fusion.attention(concat)
+                pre_fusion = cam_proj * weights[:, 0:1] + lidar_proj * weights[:, 1:2]
+            else:
+                pre_fusion = cam_proj + lidar_proj
             fused = pre_fusion
 
         logits = self.head(fused)
