@@ -1,16 +1,16 @@
 {
   "concat": {
-    "miou": 0.6712239885060108,
+    "miou": 0.6744037920082865,
     "total_params": "573,442",
     "fusion_params": "161,920"
   },
   "minimal": {
-    "miou": 0.6656942358520835,
+    "miou": 0.6721284553884538,
     "total_params": "494,978",
     "fusion_params": "93,056"
   },
   "weighted": {
-    "miou": 0.6431428371399412,
+    "miou": 0.6636319650157716,
     "total_params": "528,132",
     "fusion_params": "126,210"
   }

@@ -4,3 +4,10 @@ venv
 
 # VSCode settings
 .vscode
+.html
+
+# Some folders 
+notebooks/
+visualizations/
+visualizations_with_metrics/
+

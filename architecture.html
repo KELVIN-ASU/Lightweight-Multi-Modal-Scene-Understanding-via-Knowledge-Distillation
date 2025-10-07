@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Modal BEV Segmentation Architecture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: white;
+            padding: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1a1a1a;
+            margin-bottom: 40px;
+            font-size: 26px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        svg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .node {
+            cursor: default;
+        }
+
+        .node-rect {
+            stroke-width: 2;
+            rx: 6;
+        }
+
+        .input-node { fill: #e3f2fd; stroke: #1976d2; }
+        .encoder-node { fill: #bbdefb; stroke: #1565c0; }
+        .fusion-node { fill: #fff3e0; stroke: #ef6c00; }
+        .decoder-node { fill: #f8bbd0; stroke: #c2185b; }
+        .output-node { fill: #c8e6c9; stroke: #388e3c; }
+        .info-node { fill: #fffde7; stroke: #f57f17; }
+
+        .node-title {
+            font-weight: 600;
+            font-size: 13px;
+            fill: #1a1a1a;
+        }
+
+        .node-text {
+            font-size: 11px;
+            fill: #424242;
+        }
+
+        .node-subtitle {
+            font-size: 10px;
+            fill: #666;
+            font-style: italic;
+        }
+
+        .arrow {
+            fill: none;
+            stroke: #424242;
+            stroke-width: 2;
+            marker-end: url(#arrowhead);
+        }
+
+        .arrow-label {
+            font-size: 10px;
+            font-weight: 600;
+            fill: #1a1a1a;
+        }
+
+        .legend-title {
+            font-size: 13px;
+            font-weight: 600;
+            fill: #1a1a1a;
+        }
+
+        .legend-text {
+            font-size: 11px;
+            fill: #424242;
+        }
+
+        .info-title {
+            font-size: 12px;
+            font-weight: 600;
+            fill: #1a1a1a;
+        }
+
+        .info-text {
+            font-size: 10px;
+            fill: #424242;
+        }
+
+        @media print {
+            body {
+                padding: 0;
+                background: white;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Lightweight Multi-Modal BEV Segmentation Architecture</h1>
+        
+        <svg viewBox="0 0 1400 1050" xmlns="http://www.w3.org/2000/svg">
+            <!-- Arrow marker definition -->
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                    <polygon points="0 0, 10 3, 0 6" fill="#424242" />
+                </marker>
+            </defs>
+
+            <!-- INPUT LAYER -->
+            <g class="node">
+                <rect class="node-rect input-node" x="100" y="20" width="200" height="70"/>
+                <text class="node-title" x="200" y="45" text-anchor="middle">RGB Camera Input</text>
+                <text class="node-text" x="200" y="62" text-anchor="middle">256 × 256 × 3</text>
+                <text class="node-subtitle" x="200" y="78" text-anchor="middle">Front camera view</text>
+            </g>
+
+            <g class="node">
+                <rect class="node-rect input-node" x="450" y="20" width="200" height="70"/>
+                <text class="node-title" x="550" y="45" text-anchor="middle">LiDAR Points</text>
+                <text class="node-text" x="550" y="62" text-anchor="middle">5000 × 4</text>
+                <text class="node-subtitle" x="550" y="78" text-anchor="middle">(x, y, z, intensity)</text>
+            </g>
+
+            <!-- Arrows from input -->
+            <path class="arrow" d="M 200 90 L 200 140"/>
+            <path class="arrow" d="M 550 90 L 550 140"/>
+
+            <!-- CAMERA ENCODER -->
+            <g class="node">
+                <rect class="node-rect encoder-node" x="50" y="140" width="300" height="95"/>
+                <text class="node-title" x="200" y="163" text-anchor="middle">TwinLiteEncoder (Camera)</text>
+                <text class="node-text" x="200" y="180" text-anchor="middle">MobileNetV2-style Architecture</text>
+                <text class="node-text" x="200" y="196" text-anchor="middle">base_channels=32, InvertedResidual blocks</text>
+                <text class="node-subtitle" x="200" y="222" text-anchor="middle">363,520 parameters (63%)</text>
+            </g>
+
+            <!-- Camera stages -->
+            <g class="node">
+                <rect class="node-rect encoder-node" x="60" y="265" width="80" height="60"/>
+                <text class="node-title" x="100" y="287" text-anchor="middle">Stage 3</text>
+                <text class="node-text" x="100" y="304" text-anchor="middle">64×64×64</text>
+            </g>
+
+            <g class="node">
+                <rect class="node-rect encoder-node" x="160" y="265" width="80" height="60"/>
+                <text class="node-title" x="200" y="287" text-anchor="middle">Stage 4</text>
+                <text class="node-text" x="200" y="304" text-anchor="middle">32×32×128</text>
+            </g>
+
+            <g class="node">
+                <rect class="node-rect encoder-node" x="260" y="265" width="80" height="60"/>
+                <text class="node-title" x="300" y="287" text-anchor="middle">Stage 5</text>
+                <text class="node-text" x="300" y="304" text-anchor="middle">32×32×128</text>
+            </g>
+
+            <!-- Arrows to stages -->
+            <path class="arrow" d="M 200 235 L 200 245 L 100 245 L 100 265"/>
+            <path class="arrow" d="M 200 235 L 200 245 L 200 245 L 200 265"/>
+            <path class="arrow" d="M 200 235 L 200 245 L 300 245 L 300 265"/>
+
+            <!-- Camera FPN -->
+            <g class="node">
+                <rect class="node-rect encoder-node" x="100" y="355" width="200" height="65"/>
+                <text class="node-title" x="200" y="378" text-anchor="middle">Camera FPN-Lite</text>
+                <text class="node-text" x="200" y="395" text-anchor="middle">Multi-scale fusion (Stages 3,4,5)</text>
+                <text class="node-text" x="200" y="410" text-anchor="middle">Output: 64×64×128</text>
+            </g>
+
+            <!-- Arrows from stages to FPN -->
+            <path class="arrow" d="M 100 325 L 100 340 L 200 340 L 200 355"/>
+            <path class="arrow" d="M 200 325 L 200 355"/>
+            <path class="arrow" d="M 300 325 L 300 340 L 200 340"/>
+
+            <!-- LIDAR ENCODER -->
+            <g class="node">
+                <rect class="node-rect encoder-node" x="450" y="140" width="300" height="95"/>
+                <text class="node-title" x="600" y="163" text-anchor="middle">SpatialLiDAREncoder</text>
+                <text class="node-text" x="600" y="180" text-anchor="middle">PointNet-style Architecture</text>
+                <text class="node-text" x="600" y="196" text-anchor="middle">feature_dim=128, Vectorized BEV rasterization</text>
+                <text class="node-subtitle" x="600" y="222" text-anchor="middle">25,792 parameters (5%)</text>
+            </g>
+
+            <!-- LiDAR stages -->
+            <g class="node">
+                <rect class="node-rect encoder-node" x="475" y="265" width="110" height="60"/>
+                <text class="node-title" x="530" y="287" text-anchor="middle">Point MLP</text>
+                <text class="node-text" x="530" y="304" text-anchor="middle">4→64→128</text>
+                <text class="node-subtitle" x="530" y="318" text-anchor="middle">PointNet</text>
+            </g>
+
+            <g class="node">
+                <rect class="node-rect encoder-node" x="605" y="265" width="110" height="60"/>
+                <text class="node-title" x="660" y="287" text-anchor="middle">BEV Grid</text>
+                <text class="node-text" x="660" y="304" text-anchor="middle">64×64×128</text>
+                <text class="node-subtitle" x="660" y="318" text-anchor="middle">Max pool</text>
+            </g>
+
+            <!-- Arrows for LiDAR -->
+            <path class="arrow" d="M 600 235 L 600 245 L 530 245 L 530 265"/>
+            <path class="arrow" d="M 600 235 L 600 245 L 660 245 L 660 265"/>
+
+            <!-- LiDAR Features -->
+            <g class="node">
+                <rect class="node-rect encoder-node" x="500" y="355" width="200" height="65"/>
+                <text class="node-title" x="600" y="378" text-anchor="middle">LiDAR Features</text>
+                <text class="node-text" x="600" y="395" text-anchor="middle">64×64×128</text>
+                <text class="node-subtitle" x="600" y="410" text-anchor="middle">BEV representation</text>
+            </g>
+
+            <!-- Arrows from LiDAR stages to features -->
+            <path class="arrow" d="M 530 325 L 530 340 L 600 340 L 600 355"/>
+            <path class="arrow" d="M 660 325 L 660 340 L 600 340"/>
+
+            <!-- Arrows to fusion with labels -->
+            <path class="arrow" d="M 200 420 L 200 485"/>
+            <text class="arrow-label" x="210" y="455" text-anchor="start">128ch</text>
+
+            <path class="arrow" d="M 600 420 L 600 485"/>
+            <text class="arrow-label" x="610" y="455" text-anchor="start">128ch</text>
+
+            <!-- FUSION LAYER -->
+            <g class="node">
+                <rect class="node-rect fusion-node" x="150" y="485" width="500" height="95"/>
+                <text class="node-title" x="400" y="508" text-anchor="middle" font-size="14px">Concatenation Fusion (Best: 67.4% mIoU)</text>
+                <text class="node-text" x="400" y="527" text-anchor="middle">Camera [128] + LiDAR [128] → Concat [256]</text>
+                <text class="node-text" x="400" y="543" text-anchor="middle">Depthwise Conv → Pointwise Conv</text>
+                <text class="node-text" x="400" y="559" text-anchor="middle">Output: 64×64×256</text>
+                <text class="node-subtitle" x="400" y="572" text-anchor="middle">161,920 parameters (28%)</text>
+            </g>
+
+            <!-- Alternative fusion boxes -->
+            <g class="node">
+                <rect class="node-rect fusion-node" x="800" y="505" width="250" height="30"/>
+                <text class="node-text" x="925" y="524" text-anchor="middle">Minimal: 66.6% mIoU (93,056 params)</text>
+            </g>
+
+            <g class="node">
+                <rect class="node-rect fusion-node" x="800" y="545" width="250" height="30"/>
+                <text class="node-text" x="925" y="564" text-anchor="middle">Weighted: 66.4% mIoU (126,210 params)</text>
+            </g>
+
+            <!-- Arrow to decoder -->
+            <path class="arrow" d="M 400 580 L 400 640"/>
+            <text class="arrow-label" x="410" y="615" text-anchor="start">256ch</text>
+
+            <!-- DECODER -->
+            <g class="node">
+                <rect class="node-rect decoder-node" x="200" y="640" width="400" height="80"/>
+                <text class="node-title" x="400" y="663" text-anchor="middle">Segmentation Head</text>
+                <text class="node-text" x="400" y="680" text-anchor="middle">DWSepConv(256→64) → DWSepConv(64→32)</text>
+                <text class="node-text" x="400" y="696" text-anchor="middle">→ Conv1x1(32→2)</text>
+                <text class="node-subtitle" x="400" y="712" text-anchor="middle">22,243 parameters (4%)</text>
+            </g>
+
+            <!-- Arrow to output -->
+            <path class="arrow" d="M 400 720 L 400 775"/>
+            <text class="arrow-label" x="410" y="750" text-anchor="start">2 classes</text>
+
+            <!-- OUTPUT -->
+            <g class="node">
+                <rect class="node-rect output-node" x="250" y="775" width="300" height="65"/>
+                <text class="node-title" x="400" y="798" text-anchor="middle" font-size="14px">BEV Segmentation Map</text>
+                <text class="node-text" x="400" y="815" text-anchor="middle">64 × 64 × 2</text>
+                <text class="node-subtitle" x="400" y="830" text-anchor="middle">[Background, Drivable Area]</text>
+            </g>
+
+            <!-- Total parameters -->
+            <text class="node-title" x="400" y="870" text-anchor="middle" font-size="15px">Total: 573,442 parameters</text>
+
+            <!-- MODEL STATISTICS PANEL -->
+            <g class="node">
+                <rect class="node-rect info-node" x="800" y="140" width="250" height="190"/>
+                <text class="info-title" x="925" y="160" text-anchor="middle">Model Statistics</text>
+                <text class="info-text" x="820" y="182" font-weight="600">Total: 573,442 params</text>
+                <text class="info-text" x="820" y="200">Camera: 363,520 (63%)</text>
+                <text class="info-text" x="820" y="216">LiDAR: 25,792 (5%)</text>
+                <text class="info-text" x="820" y="232">Fusion: 161,920 (28%)</text>
+                <text class="info-text" x="820" y="248">Decoder: 22,243 (4%)</text>
+                
+                <text class="info-title" x="925" y="270" text-anchor="middle">Performance</text>
+                <text class="info-text" x="820" y="288" font-weight="600">Val mIoU: 67.4%</text>
+                <text class="info-text" x="820" y="304">• Background: 90.1%</text>
+                <text class="info-text" x="820" y="320">• Drivable: 44.8%</text>
+            </g>
+
+            <!-- DATASET INFO PANEL -->
+            <g class="node">
+                <rect class="node-rect info-node" x="800" y="350" width="250" height="140"/>
+                <text class="info-title" x="925" y="370" text-anchor="middle">Dataset: PandaSet</text>
+                <text class="info-text" x="820" y="392">Train: 1,920 samples</text>
+                <text class="info-text" x="820" y="408">Validation: 480 samples</text>
+                <text class="info-text" x="820" y="424">Classes: 2 (bg/drivable)</text>
+                <text class="info-text" x="820" y="440">BEV Range: [-50m, 50m]²</text>
+                <text class="info-text" x="820" y="456">Grid: 64×64</text>
+                <text class="info-text" x="820" y="472">Class Weights: [0.4, 3.5]</text>
+            </g>
+
+            <!-- LEGEND -->
+            <g class="node">
+                <rect class="node-rect" x="800" y="650" width="250" height="160" fill="#f5f5f5" stroke="#666"/>
+                <text class="legend-title" x="925" y="670" text-anchor="middle">Component Types</text>
+                
+                <rect x="820" y="685" width="25" height="18" class="input-node"/>
+                <text class="legend-text" x="855" y="698">Input Data</text>
+                
+                <rect x="820" y="710" width="25" height="18" class="encoder-node"/>
+                <text class="legend-text" x="855" y="723">Encoders</text>
+                
+                <rect x="820" y="735" width="25" height="18" class="fusion-node"/>
+                <text class="legend-text" x="855" y="748">Fusion Layer</text>
+                
+                <rect x="820" y="760" width="25" height="18" class="decoder-node"/>
+                <text class="legend-text" x="855" y="773">Decoder</text>
+                
+                <rect x="820" y="785" width="25" height="18" class="output-node"/>
+                <text class="legend-text" x="855" y="798">Output</text>
+            </g>
+
+        </svg>
+    </div>
+</body>
+</html>
